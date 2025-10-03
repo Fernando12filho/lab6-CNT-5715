@@ -6,13 +6,15 @@ import os
 FTP_USER = 'user'
 FTP_PASS = 'password'
 FTP_ROOT = './ftp_root'  # Directory for storing files
-HOST = '0.0.0.0'  # Listen on all interfaces
+HOST = '127.0.0.1'  # Listen on all interfaces
 PORT = 2121  # FTP control port
+
 
 def handle_client(client_socket):
     client_socket.send(b'220 Welcome to Simple FTP Server\r\n')
 
     authenticated = False
+    username_ok = False
     cmd_with_data = ''
     file_path = ''
     filename = ''
@@ -27,15 +29,25 @@ def handle_client(client_socket):
         print(f"Received command: {command}")
         
         if command.startswith('USER'):
-            client_socket.send(b'331 Username okay, need password.\r\n')
-        
-        elif command.startswith('PASS'):
-            if command.split()[1] == FTP_PASS:
-                authenticated = True
-                client_socket.send(b'230 User logged in, proceed.\r\n')
+            uname = command.split()[1] if len(command.split()) > 1 else ''
+            if uname == FTP_USER:
+                username_ok = True
+                client_socket.send(b'331 Username okay, need password.\r\n')
             else:
-                client_socket.send(b'530 Login incorrect.\r\n')
-        
+                client_socket.send(b'332 Username incorrect.\r\n')
+
+        elif command.startswith('PASS'):
+            parts = command.split()
+            if len(parts) < 2:
+                client_socket.send(b'501 Illegal PASS command.\r\n')
+            else:
+                passwd = parts[1]
+                if username_ok and passwd == FTP_PASS:
+                    authenticated = True
+                    client_socket.send(b'230 User logged in, proceed.\r\n')
+                else:
+                    client_socket.send(b'530 Password incorrect.\r\n')
+
         elif authenticated:
             if command.startswith('RETR'):
                 filename = command.split()[1]
@@ -59,7 +71,6 @@ def handle_client(client_socket):
                 client_socket.send(b'150 Here comes the directory listing.\r\n')
                 cmd_with_data = 'LIST'
                    
-
             elif command == 'PASV':
                 data_socket, passive_port = enter_passive_mode(client_socket)
                 ip, port1, port2 = convert_ip_port(HOST, passive_port)
@@ -68,27 +79,38 @@ def handle_client(client_socket):
                 data_conn, addr = data_socket.accept()
 
                 if cmd_with_data == 'LIST':
+                    total_bytes = 0
                     for file in os.listdir(FTP_ROOT):
-                        data_conn.send(f"{file}\r\n".encode('utf-8'))
+                        line = f"{file}\r\n".encode('utf-8')
+                        data_conn.send(line)
+                        total_bytes += len(line)
                     data_conn.close()
-                    client_socket.send(b'226 Directory send OK.\r\n')
+                    client_socket.send(f'226 Directory send OK. {total_bytes} bytes transferred.\r\n'.encode('utf-8'))
 
                 elif cmd_with_data == 'RETR' and file_exist:
+                    total_bytes = 0
                     with open(file_path, 'rb') as f:
-                        data_conn.sendfile(f)
-                        data_conn.close()
+                        while True:
+                            chunk = f.read(1024)
+                            if not chunk:
+                                break
+                            data_conn.send(chunk)
+                            total_bytes += len(chunk)
+                    data_conn.close()
                     file_exist = False
-                    client_socket.send(b'226 Transfer complete.\r\n')
+                    client_socket.send(f'226 Transfer complete. {total_bytes} bytes transferred.\r\n'.encode('utf-8'))
 
                 elif cmd_with_data == 'STOR':
+                    total_bytes = 0
                     with open(file_path, 'wb') as f:
                         while True:
                             data = data_conn.recv(1024)
                             if not data:
                                 break
                             f.write(data)
+                            total_bytes += len(data)
                     data_conn.close()
-                    client_socket.send(b'226 Transfer complete.\r\n')
+                    client_socket.send(f'226 Transfer complete. {total_bytes} bytes transferred.\r\n'.encode('utf-8'))
 
                 cmd_with_data = ''
 
