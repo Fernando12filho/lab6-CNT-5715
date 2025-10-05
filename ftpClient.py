@@ -3,7 +3,7 @@ import threading
 import os
 
 HOST = '127.0.0.1'  # Server IP
-PORT = 2121         # FTP control port
+PORT = 2124         # FTP control port
 control_socket = None  # Global control socket for use by the console thread
 authenticated = False
 

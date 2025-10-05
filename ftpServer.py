@@ -150,13 +150,15 @@ def start_ftp_server():
     # Set up root directory
     if not os.path.exists(FTP_ROOT):
         os.makedirs(FTP_ROOT)
-    
+
+    # Creates TCP/IPv4 Server Socket 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
     print(f"FTP server listening on {HOST}:{PORT}")
-    
+
+   # Loop keeps server alive to accept client connections 
     while True:
         client_socket, addr = server_socket.accept()
         print(f"Accepted connection from {addr}")
